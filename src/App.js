@@ -1,11 +1,13 @@
 import React, { useCallback, useRef, useState } from "react";
 import { read, utils, writeFileXLSX } from 'xlsx';
+import { TextField, FormControlLabel, Checkbox, Button, Box, Typography, Grid } from '@mui/material';
 
-export default function SheetJSReactHTML() {
+const App = () => {
   const [__html, setHtml] = useState("");
   const [data, setData] = useState([]);
   const [columns, setColumns] = useState([]);
   const [selectedColumns, setSelectedColumns] = useState([]);
+  const [isTableReady, setIsTableReady] = useState(false);
   const tbl = useRef(null);
 
   const handleFileUpload = useCallback((event) => {
@@ -39,14 +41,14 @@ export default function SheetJSReactHTML() {
 
   const handleColumnUpdate = useCallback(() => {
     const updatedData = [...data];
-    let newColumnIndex = updatedData[0].indexOf('New Column');
+    let newColumnIndex = updatedData[0].indexOf('File Name');
 
     if (newColumnIndex === -1) {
-      // Add new column header if it doesn't exist
-      updatedData[0].push('New Column');
+      // Add File Name header if it doesn't exist
+      updatedData[0].push('File Name');
       newColumnIndex = updatedData[0].length - 1;
     } else {
-      // Clear the "New Column" if it already exists
+      // Clear the "File Name" if it already exists
       for (let i = 1; i < updatedData.length; i++) {
         updatedData[i][newColumnIndex] = '';
       }
@@ -57,7 +59,7 @@ export default function SheetJSReactHTML() {
         // Find the column index
         const colIndex = columns.indexOf(col);
 
-        // Update the "New Column" with selected column values
+        // Update the "File Name" with selected column values
         for (let i = 1; i < updatedData.length; i++) {
           const cellValue = `${updatedData[i][colIndex]}`;
           if (!updatedData[i][newColumnIndex]) {
@@ -77,36 +79,65 @@ export default function SheetJSReactHTML() {
 
     setHtml(newHtml); // update state
     setData(updatedData); // update data state
+    setIsTableReady(true); // table is ready for export
   }, [data, selectedColumns, columns]);
 
   const exportFile = useCallback(() => {
     const elt = tbl.current.getElementsByTagName("TABLE")[0];
     const wb = utils.table_to_book(elt);
-    writeFileXLSX(wb, "SheetJSReactHTML.xlsx");
+    writeFileXLSX(wb, "output.xlsx");
   }, [tbl]);
 
   return (
-    <>
-      <input type="file" accept=".xlsx, .xls" onChange={handleFileUpload} />
-      <div>
-        {columns.map((col, index) => (
-          col !== "New Column" && (
-            <div key={index}>
-              <input
-                type="checkbox"
-                id={`checkbox-${col}`}
-                name={col}
-                value={col}
-                onChange={() => handleCheckboxChange(col)}
-              />
-              <label htmlFor={`checkbox-${col}`}>{col}</label>
-            </div>
-          )
-        ))}
-      </div>
-      <button onClick={handleColumnUpdate}>Update Columns</button>
-      <button onClick={exportFile}>Export XLSX</button>
-      <div ref={tbl} dangerouslySetInnerHTML={{ __html }} />
-    </>
+    <Box sx={{ padding: 4, backgroundColor: '#f5f5f5', borderRadius: 2 }}>
+      <Typography variant="h4" gutterBottom>
+        Upload and Manage File
+      </Typography>
+      <TextField
+        id="standard-basic"
+        variant="standard"
+        type="file"
+        accept=".xlsx, .xls"
+        onChange={handleFileUpload}
+        sx={{ marginBottom: 2 }}
+      />
+      {columns.length > 0 && <Box>
+        <Typography variant="h6" gutterBottom>
+          Select columns in order so that file name generate in same sequence
+        </Typography>
+        <Grid container spacing={2}>
+          {columns.map((column, index) => (
+            column !== "File Name" && (
+              <Grid item key={index} xs={12} sm={6} md={4}>
+                <FormControlLabel
+                  control={
+                    <Checkbox
+                      name={column}
+                      value={column}
+                      onChange={() => handleCheckboxChange(column)}
+                    />
+                  }
+                  label={column}
+                />
+              </Grid>
+            )
+          ))}
+        </Grid>
+      </Box>}
+
+      <Box sx={{ marginTop: 2 }}>
+        {selectedColumns.length > 0 && <Button variant="contained" onClick={handleColumnUpdate} sx={{ marginRight: 2 }}>
+          Generate file name column based on selected columns
+        </Button>}
+        {isTableReady && <Button variant="contained" onClick={exportFile}>
+          Export XLSX
+        </Button>}
+      </Box>
+      <Box sx={{ marginTop: 4 }}>
+        <div ref={tbl} dangerouslySetInnerHTML={{ __html }} />
+      </Box>
+    </Box>
   );
 }
+
+export default App;
