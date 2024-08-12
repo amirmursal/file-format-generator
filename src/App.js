@@ -9,21 +9,29 @@ const App = () => {
   const [selectedColumns, setSelectedColumns] = useState([]);
   const [isTableReady, setIsTableReady] = useState(false);
   const tbl = useRef(null);
+  const wsRef = useRef(null);
 
   const handleFileUpload = useCallback((event) => {
     const file = event.target.files[0];
     const reader = new FileReader();
     reader.onload = (e) => {
       const arrayBuffer = e.target.result;
-      const wb = read(arrayBuffer); // parse the array buffer
-      const ws = wb.Sheets[wb.SheetNames[0]]; // get the first worksheet
+      const wb = read(arrayBuffer, { cellText: true, raw: true });
+      const ws = wb.Sheets[wb.SheetNames[0]];
 
-      // Convert worksheet to JSON to manipulate data
-      const jsonData = utils.sheet_to_json(ws, { header: 1 });
-      setData(jsonData); // set data state
+      wsRef.current = ws;
 
-      // Extract column headers and set columns state
-      const colHeaders = jsonData[0];
+      const jsonData = utils.sheet_to_json(ws, { header: 1, raw: true });
+
+      // Ensure that large numbers are kept as strings
+      const processedData = jsonData.map(row => 
+        row.map(cell => 
+          typeof cell === 'number' && cell > 1e12 ? cell.toFixed(0) : cell
+        )
+      );
+
+      setData(processedData);
+      const colHeaders = processedData[0];
       setColumns(colHeaders);
     };
     reader.readAsArrayBuffer(file);
@@ -44,43 +52,53 @@ const App = () => {
     let newColumnIndex = updatedData[0].indexOf('File Name');
 
     if (newColumnIndex === -1) {
-      // Add File Name header if it doesn't exist
-      updatedData[0].push('File Name');
-      newColumnIndex = updatedData[0].length - 1;
+        updatedData[0].push('File Name');
+        newColumnIndex = updatedData[0].length - 1;
     } else {
-      // Clear the "File Name" if it already exists
-      for (let i = 1; i < updatedData.length; i++) {
-        updatedData[i][newColumnIndex] = '';
-      }
+        for (let i = 1; i < updatedData.length; i++) {
+            updatedData[i][newColumnIndex] = '';
+        }
     }
 
     if (selectedColumns.length > 0) {
-      selectedColumns.forEach(col => {
-        // Find the column index
-        const colIndex = columns.indexOf(col);
+        selectedColumns.forEach(col => {
+            const colIndex = columns.indexOf(col);
 
-        // Update the "File Name" with selected column values
-        for (let i = 1; i < updatedData.length; i++) {
-          const cellValue = `${updatedData[i][colIndex]}`;
-          if (!updatedData[i][newColumnIndex]) {
-            updatedData[i][newColumnIndex] = cellValue;
-          } else if (!updatedData[i][newColumnIndex].includes(cellValue)) {
-            updatedData[i][newColumnIndex] += ` ${cellValue}`;
-          }
-        }
-      });
+            for (let i = 1; i < updatedData.length; i++) {
+                let cellValue = updatedData[i][colIndex];
+
+                // Handle large numbers and ensure $ sign and decimal places are preserved
+                if (typeof cellValue === 'number') {
+                    if (Math.abs(cellValue) >= 1e12) {
+                        // Convert large number to string without scientific notation
+                        cellValue = cellValue.toLocaleString('fullwide', { useGrouping: false });
+                    } else {
+                        // Ensure decimal places are preserved
+                        cellValue = `$${cellValue.toFixed(2)}`;
+                    }
+                } else if (typeof cellValue === 'string' && cellValue.trim().startsWith('$')) {
+                    // Add dollar sign explicitly if it's a monetary value
+                    const numberValue = parseFloat(cellValue.replace('$', ''));
+                    cellValue = `$${numberValue.toFixed(2)}`;
+                }
+
+                // Append to "File Name" column
+                if (!updatedData[i][newColumnIndex]) {
+                    updatedData[i][newColumnIndex] = cellValue;
+                } else if (!updatedData[i][newColumnIndex].includes(cellValue)) {
+                    updatedData[i][newColumnIndex] += ` ${cellValue}`;
+                }
+            }
+        });
     }
 
-    // Convert JSON back to worksheet
-    const newWs = utils.json_to_sheet(updatedData, { skipHeader: true });
-
-    // Generate HTML from the updated worksheet
+    const newWs = utils.aoa_to_sheet(updatedData);
     const newHtml = utils.sheet_to_html(newWs);
 
-    setHtml(newHtml); // update state
-    setData(updatedData); // update data state
-    setIsTableReady(true); // table is ready for export
-  }, [data, selectedColumns, columns]);
+    setHtml(newHtml);
+    setData(updatedData);
+    setIsTableReady(true);
+}, [data, selectedColumns, columns]);
 
   const exportFile = useCallback(() => {
     const elt = tbl.current.getElementsByTagName("TABLE")[0];
